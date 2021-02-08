@@ -1,6 +1,6 @@
 /**
  * Marlin 3D Printer Firmware
- * Copyright (c) 2020 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
+ * Copyright (c) 2019 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
  *
  * Based on Sprinter and grbl.
  * Copyright (c) 2011 Camiel Gubbels / Erik van der Zalm
@@ -16,7 +16,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
@@ -31,7 +31,6 @@ BLTouch bltouch;
 bool BLTouch::last_written_mode; // Initialized by settings.load, 0 = Open Drain; 1 = 5V Drain
 
 #include "../module/servo.h"
-#include "../module/probe.h"
 
 void stop();
 
@@ -74,12 +73,20 @@ void BLTouch::init(const bool set_voltage/*=false*/) {
       );
     }
 
-    const bool should_set = last_written_mode != ENABLED(BLTOUCH_SET_5V_MODE);
+    const bool should_set = last_written_mode != (false
+      #if ENABLED(BLTOUCH_SET_5V_MODE)
+        || true
+      #endif
+    );
 
   #endif
 
   if (should_set && set_voltage)
-    mode_conv_proc(ENABLED(BLTOUCH_SET_5V_MODE));
+    mode_conv_proc((false
+      #if ENABLED(BLTOUCH_SET_5V_MODE)
+        || true
+      #endif
+    ));
 }
 
 void BLTouch::clear() {
@@ -91,7 +98,15 @@ void BLTouch::clear() {
   _stow();     // STOW to be ready for meaningful work. Could fail, don't care
 }
 
-bool BLTouch::triggered() { return PROBE_TRIGGERED(); }
+bool BLTouch::triggered() {
+  return (
+    #if ENABLED(Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN)
+      READ(Z_MIN_PIN) != Z_MIN_ENDSTOP_INVERTING
+    #else
+      READ(Z_MIN_PROBE_PIN) != Z_MIN_PROBE_ENDSTOP_INVERTING
+    #endif
+  );
+}
 
 bool BLTouch::deploy_proc() {
   // Do a DEPLOY
@@ -109,7 +124,7 @@ bool BLTouch::deploy_proc() {
       // The deploy might have failed or the probe is actually triggered (nozzle too low?) again
       if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("BLTouch Recovery Failed");
 
-      SERIAL_ERROR_MSG(STR_STOP_BLTOUCH);  // Tell the user something is wrong, needs action
+      SERIAL_ERROR_MSG(MSG_STOP_BLTOUCH);  // Tell the user something is wrong, needs action
       stop();                              // but it's not too bad, no need to kill, allow restart
 
       return true;                         // Tell our caller we goofed in case he cares to know
@@ -117,7 +132,9 @@ bool BLTouch::deploy_proc() {
   }
 
   // One of the recommended ANTClabs ways to probe, using SW MODE
-  TERN_(BLTOUCH_FORCE_SW_MODE, _set_SW_mode());
+  #if ENABLED(BLTOUCH_FORCE_SW_MODE)
+   _set_SW_mode();
+  #endif
 
   // Now the probe is ready to issue a 10ms pulse when the pin goes up.
   // The trigger STOW (see motion.cpp for example) will pull up the probes pin as soon as the pulse
@@ -152,7 +169,7 @@ bool BLTouch::stow_proc() {
 
       if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("BLTouch Recovery Failed");
 
-      SERIAL_ERROR_MSG(STR_STOP_BLTOUCH);  // Tell the user something is wrong, needs action
+      SERIAL_ERROR_MSG(MSG_STOP_BLTOUCH);  // Tell the user something is wrong, needs action
       stop();                              // but it's not too bad, no need to kill, allow restart
 
       return true;                         // Tell our caller we goofed in case he cares to know
